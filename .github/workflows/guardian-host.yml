@@ -1,0 +1,52 @@
+# Guardian RT core — host build + unit tests (no QNX SDP needed).
+# Runs on GitHub-hosted x86_64 and arm64 Ubuntu runners.
+name: guardian-host
+
+# No path filters: these jobs are required status checks for merging into main, so they must
+# report on every pull request (a filtered-out required check would block the PR forever).
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install toolchain + GoogleTest
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends cmake ninja-build g++ googletest gcovr
+
+      - name: Configure
+        working-directory: guardian
+        run: cmake --preset host-test -G Ninja
+
+      - name: Build (-Werror)
+        working-directory: guardian
+        run: cmake --build --preset host-test
+
+      - name: Unit tests
+        working-directory: guardian
+        run: ctest --preset host-test
+
+      - name: Coverage summary
+        working-directory: guardian
+        run: gcovr --root . --filter src/ --exclude src/platform/ build/host-test
+
+      - name: Release build (POSIX runner)
+        working-directory: guardian
+        run: |
+          cmake --preset host-release -G Ninja
+          cmake --build --preset host-release

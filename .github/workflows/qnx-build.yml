@@ -1,0 +1,95 @@
+# Guardian RT core — cross-build for QNX 8.0 (aarch64le + x86_64).
+#
+# Runs on a self-hosted runner with QNX SDP 8.0 installed (label `qnx800`). The SDP and its
+# licence stay on that machine: nothing QNX-proprietary is downloaded, cached or uploaded here
+# except the binaries we build.
+#
+# Security (public repo): the job never runs for pull requests from forks, so untrusted code
+# cannot execute on the self-hosted runner.
+name: qnx-build
+
+on:
+  push:
+    branches: [main]
+    paths: ['guardian/**', '.github/workflows/qnx-build.yml']
+  pull_request:
+    branches: [main]
+    paths: ['guardian/**', '.github/workflows/qnx-build.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qnx-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  guardian:
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, Linux, X64, qnx800]
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      max-parallel: 1   # one small build host
+      matrix:
+        include:
+          - arch: aarch64le
+            nm: ntoaarch64-nm
+            elf: 'ARM aarch64'
+          - arch: x86_64
+            nm: ntox86_64-nm
+            elf: 'x86-64'
+    env:
+      PRESET: qnx-${{ matrix.arch }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: QNX SDP environment
+        run: |
+          sdp="${QNX_SDP_ROOT:-$HOME/qnx800}"
+          test -f "$sdp/qnxsdp-env.sh" || { echo "::error::QNX SDP not found at $sdp"; exit 1; }
+          source "$sdp/qnxsdp-env.sh" >/dev/null
+          {
+            echo "QNX_HOST=$QNX_HOST"
+            echo "QNX_TARGET=$QNX_TARGET"
+            echo "QNX_CONFIGURATION=$QNX_CONFIGURATION"
+            echo "MAKEFLAGS=$MAKEFLAGS"
+          } >> "$GITHUB_ENV"
+          echo "$QNX_HOST/usr/bin" >> "$GITHUB_PATH"
+          if [ -d "$HOME/.local/cmake/bin" ]; then echo "$HOME/.local/cmake/bin" >> "$GITHUB_PATH"; fi
+
+      - name: Toolchain versions
+        run: |
+          cmake --version | head -1
+          q++ -V 2>&1 | head -6 || true   # lists installed gcc_nto* targets
+
+      - name: Configure
+        working-directory: guardian
+        run: cmake --preset "$PRESET" -G Ninja
+
+      - name: Build (-Werror)
+        working-directory: guardian
+        run: nice -n 10 cmake --build --preset "$PRESET"
+
+      - name: Verify QNX binary
+        working-directory: guardian
+        run: |
+          bin="build/$PRESET/guardian"
+          file "$bin" | tee /dev/stderr | grep -q '${{ matrix.elf }}'
+          file "$bin" | grep -q 'ldqnx'
+          # The QNX loop (main_qnx.cpp) is in, not the POSIX fallback.
+          for sym in MsgReceivePulse ChannelCreate timer_create timer_settime; do
+            ${{ matrix.nm }} -D --undefined-only "$bin" | grep -qw "$sym" \
+              || { echo "::error::$sym not referenced: wrong main?"; exit 1; }
+          done
+          echo "QNX APIs referenced: MsgReceivePulse ChannelCreate timer_create timer_settime"
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: guardian-qnx800-${{ matrix.arch }}
+          path: guardian/build/${{ env.PRESET }}/guardian
+          if-no-files-found: error
+          retention-days: 14
