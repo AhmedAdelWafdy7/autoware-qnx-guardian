@@ -1,0 +1,48 @@
+{
+  "version": 6,
+  "configurePresets": [
+    {
+      "name": "host-test",
+      "displayName": "Host (Linux) unit tests + coverage",
+      "binaryDir": "${sourceDir}/build/host-test",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "GUARDIAN_BUILD_TESTS": "ON",
+        "GUARDIAN_COVERAGE": "ON"
+      }
+    },
+    {
+      "name": "host-release",
+      "displayName": "Host (Linux) release — Linux baseline for benchmarks",
+      "binaryDir": "${sourceDir}/build/host-release",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
+    },
+    {
+      "name": "qnx-aarch64le",
+      "displayName": "QNX 8.0 aarch64le (Raspberry Pi 5)",
+      "binaryDir": "${sourceDir}/build/qnx-aarch64le",
+      "toolchainFile": "${sourceDir}/cmake/qnx-aarch64le.cmake",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
+    },
+    {
+      "name": "qnx-x86_64",
+      "displayName": "QNX 8.0 x86_64 (QEMU)",
+      "binaryDir": "${sourceDir}/build/qnx-x86_64",
+      "toolchainFile": "${sourceDir}/cmake/qnx-x86_64.cmake",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
+    }
+  ],
+  "buildPresets": [
+    { "name": "host-test", "configurePreset": "host-test" },
+    { "name": "host-release", "configurePreset": "host-release" },
+    { "name": "qnx-aarch64le", "configurePreset": "qnx-aarch64le" },
+    { "name": "qnx-x86_64", "configurePreset": "qnx-x86_64" }
+  ],
+  "testPresets": [
+    {
+      "name": "host-test",
+      "configurePreset": "host-test",
+      "output": { "outputOnFailure": true }
+    }
+  ]
+}
