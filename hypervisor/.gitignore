@@ -1,0 +1,3 @@
+# Build output: contains QNX binaries, never commit.
+work/
+out/
