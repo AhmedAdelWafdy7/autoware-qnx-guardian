@@ -1,7 +1,7 @@
 // Copyright 2026 Ahmed Wafdy
 // SPDX-License-Identifier: Apache-2.0
 //
-// Lock-free single-producer / single-consumer event log (FR-OBS-2, NFR-Q-1).
+// Lock-free single-producer / single-consumer event log.
 // Producer: the Guardian RT cycle (never blocks, never allocates; drops and counts on full).
 // Consumer: a low-priority logger thread or the /dev/guardian resource manager.
 
@@ -25,6 +25,10 @@ enum class EventCode : std::uint16_t
   kDeadlineMiss = 4,  ///< value = lateness [ns]
   kHeartbeatLost = 5, ///< a = Source
   kIllegalTransition = 6,
+  kRssOutcome = 7,    ///< RSS outcome or reasons changed: a = rss::Outcome, reasons = rss::reason
+                      ///< flags, value = worst object index (-1 none). Logged on change, not
+                      ///< every cycle, so a sustained UNSAFE cannot flood the log.
+  kRtaSwitch = 8,     ///< a = old RtaMode, b = new RtaMode
 };
 
 struct Event

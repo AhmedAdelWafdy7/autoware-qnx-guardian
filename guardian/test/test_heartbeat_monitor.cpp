@@ -1,7 +1,7 @@
 // Copyright 2026 Ahmed Wafdy
 // SPDX-License-Identifier: Apache-2.0
 //
-// FR-HB-1, -2, -5.
+// Heartbeat monitor: liveness, timeout and sequence anomalies.
 
 #include <gtest/gtest.h>
 

@@ -2,14 +2,14 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // QNX 8.0 Guardian loop: a CLOCK_MONOTONIC timer delivers a pulse to a private channel every
-// period (FR-OUT-2); the Guardian thread blocks in MsgReceivePulse() at SCHED_FIFO.
+// period; the Guardian thread blocks in MsgReceivePulse() at SCHED_FIFO.
 // Absolute first expiry + it_interval gives drift-free periodic wake-ups.
 //
 // Compiles with QNX SDP 8.0 (q++ 12.2.0, gcc_ntoaarch64le + gcc_ntox86_64) under -Werror.
 // Needs _QNX_SOURCE (set in CMakeLists.txt): strict -std=c++17 hides the POSIX timer API and
 // SIGEV_PULSE_INIT in the QNX headers.
 // TODO(verify): not yet run on target (Pi 5 / QEMU).
-// Planned next: /dev/guardian resource manager thread (FR-OBS-1), runmask pinning,
+// Planned next: /dev/guardian resource manager thread, runmask pinning,
 // bridge inputs (TODO(bridge)).
 //
 // Usage: guardian [--cycles N] [--prio P]
@@ -77,6 +77,21 @@ int main(int argc, char ** argv)
   if (mlockall(MCL_CURRENT | MCL_FUTURE) != 0) {
     std::fprintf(stderr, "warn: mlockall: %s\n", std::strerror(errno));
   }
+
+  // Tighten the system clock tick. QNX's default tick is 1 ms, and a timer only expires on a
+  // tick boundary, so a 10 ms period (= 10 default ticks) wakes a near-constant ~1 ms late.
+  // A finer tick lets the timer fire close to the absolute deadline, cutting that offset to the
+  // tick granularity. Needs root. kTickResolution_ns is the requested tick (QNX floors it near
+  // ~10 us). Justification: deadline fidelity for the 10 ms Guardian loop; see docs/architecture.md.
+  constexpr std::int64_t kTickResolution_ns = 10'000;  // 10 us
+  struct _clockperiod newcp{};
+  newcp.nsec = static_cast<std::uint32_t>(kTickResolution_ns);
+  newcp.fract = 0;
+  if (ClockPeriod(CLOCK_REALTIME, &newcp, nullptr, 0) == -1) {
+    std::fprintf(stderr, "warn: ClockPeriod (run as root for a finer tick): %s\n",
+                 std::strerror(errno));
+  }
+
   sched_param sp{};
   sp.sched_priority = prio;
   if (pthread_setschedparam(pthread_self(), SCHED_FIFO, &sp) != EOK) {

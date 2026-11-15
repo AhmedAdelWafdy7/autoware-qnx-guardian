@@ -1,7 +1,7 @@
 // Copyright 2026 Ahmed Wafdy
 // SPDX-License-Identifier: Apache-2.0
 //
-// Wake-up latency statistics for the Guardian loop (NFR-T-1, NFR-T-3). Fixed-size, no
+// Wake-up latency statistics for the Guardian loop. Fixed-size, no
 // allocation: safe to update from the RT cycle. Identical on QNX and Linux so the
 // benchmark compares like with like.
 

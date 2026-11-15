@@ -1,8 +1,8 @@
 // Copyright 2026 Ahmed Wafdy
 // SPDX-License-Identifier: Apache-2.0
 //
-// Whole-cycle behaviour: arbitration (FR-MRM-4), Guardian MRM (FR-MRM-2), heartbeat loss
-// reaction time (FR-HB-3 / NFR-T-2), REJECT escalation (FR-CV-6), logging (FR-CV-2).
+// Whole-cycle behaviour: arbitration, Guardian MRM, heartbeat loss
+// reaction time, REJECT escalation, logging.
 
 #include <gtest/gtest.h>
 
@@ -33,7 +33,11 @@ public:
   bool doer_up{true};
   bool safety_up{true};
   bool status_up{true};
+  bool world_up{true};
   double speed{5.0};
+  /// Objects on the independent channel (ego frame). Empty = free road.
+  guardian::rss::Object objects[guardian::rss::params::kMaxObjects]{};
+  std::uint32_t num_objects{0};
   double steer_cmd{0.0};
   double accel_cmd{0.3};
 
@@ -63,6 +67,19 @@ public:
     }
     in.have_status = true;
     in.status = status_;
+    if (world_up) {
+      world_.rx_time_ns = t_;
+      world_.ego.speed_mps = speed;
+      world_.ego.front_m = 3.79;  // sample vehicle: wheel_base 2.79 + front_overhang 1.0
+      world_.ego.rear_m = 1.1;
+      world_.ego.half_width_m = 0.95;
+      world_.count = num_objects;
+      for (std::uint32_t i = 0U; i < num_objects && i < guardian::rss::params::kMaxObjects; ++i) {
+        world_.objects[i] = objects[i];
+      }
+    }
+    in.have_world = true;
+    in.world = world_;
     return in;
   }
 
@@ -75,7 +92,19 @@ private:
   guardian::HeartbeatSample safety_{};
   guardian::Command cmd_{};
   guardian::VehicleStatus status_{};
+  guardian::IndependentWorld world_{};
 };
+
+/// A stopped car in the ego lane, `x` metres ahead of base_link (centre of its footprint).
+guardian::rss::Object stopped_car_ahead(double x)
+{
+  guardian::rss::Object o;
+  o.cls = guardian::rss::ObjectClass::kVehicle;
+  o.x_m = x;
+  o.length_m = 4.0;
+  o.width_m = 1.8;
+  return o;
+}
 
 CycleOutput arm(Guardian & g, World & w)
 {
@@ -137,8 +166,8 @@ TEST(Guardian, DoerLossWithinTimeoutPlusOneCycleGoesDegraded)
     out = g.step(w.next());
   } while (out.state == State::kNormal && w.now() < lost_at + 1'000'000'000);
   EXPECT_EQ(out.state, State::kDegraded);
-  EXPECT_LE(w.now() - lost_at, L::kHeartbeatTimeout_ns + L::kCyclePeriod_ns);  // NFR-T-2
-  // Autoware's ported MRM (safety layer) still drives (FR-MRM-1).
+  EXPECT_LE(w.now() - lost_at, L::kHeartbeatTimeout_ns + L::kCyclePeriod_ns);
+  // Autoware's ported MRM (safety layer) still drives.
   EXPECT_EQ(out.actor, Actor::kSafetyLayer);
 }
 
@@ -256,7 +285,9 @@ TEST(Guardian, ClampIsLoggedAndApplied)
   w.accel_cmd = 9.0;
   const auto out = g.step(w.next());
   EXPECT_EQ(out.verdict, Verdict::kClamp);
-  EXPECT_DOUBLE_EQ(out.command.accel_mps2, L::kMaxLonAccel_mps2);
+  // Validator clamps to its envelope (5.5); the RSS envelope then clamps to the ego a_max.
+  EXPECT_EQ(out.rss_outcome, guardian::rss::Outcome::kRestrict);
+  EXPECT_DOUBLE_EQ(out.command.accel_mps2, guardian::rss::params::kEgo.lon_accel_max_mps2);
   EXPECT_EQ(count(log, EventCode::kClamp), 1);
 }
 
@@ -318,4 +349,202 @@ TEST(Guardian, NonFiniteSpeedIsNotFreshStatus)
   arm(g, w);
   w.speed = std::numeric_limits<double>::quiet_NaN();
   EXPECT_EQ(g.step(w.next()).state, State::kMrmEmergency);
+}
+
+// ------------------------------------------------- RSS + RTA Switch ---------
+// Ego at 5 m/s with rho 0.5 s, a_max 2.0, b_min 2.5 needs ~10 m to a stopped car; a car 10 m
+// ahead of base_link leaves a 4.2 m bumper gap (UNSAFE), one 60 m ahead is SAFE.
+
+using guardian::RtaMode;
+namespace rss = guardian::rss;
+
+TEST(GuardianRss, FreeRoadIsSafeAndTheComplexFunctionDrives)
+{
+  Guardian g;
+  World w;
+  const auto out = arm(g, w);
+  EXPECT_EQ(out.rss_outcome, rss::Outcome::kSafe);
+  EXPECT_EQ(out.rta_mode, RtaMode::kComplexFunction);
+  EXPECT_EQ(out.actor, Actor::kSafetyLayer);
+}
+
+TEST(GuardianRss, FarCarIsSafe)
+{
+  Guardian g;
+  World w;
+  arm(g, w);
+  w.objects[0] = stopped_car_ahead(60.0);
+  w.num_objects = 1;
+  const auto out = g.step(w.next());
+  EXPECT_EQ(out.rss_outcome, rss::Outcome::kSafe);
+  EXPECT_EQ(out.actor, Actor::kSafetyLayer);
+}
+
+TEST(GuardianRss, CarAheadSwitchesToRecoveryWithAStepBrakeInTheSameCycle)
+{
+  // Twin Guardians with identical inputs, one sees a car ahead on the independent channel.
+  Guardian g;
+  Guardian twin;
+  World w;
+  World tw;
+  w.steer_cmd = 0.05;
+  tw.steer_cmd = 0.05;
+  arm(g, w);
+  arm(twin, tw);
+  w.objects[0] = stopped_car_ahead(10.0);
+  w.num_objects = 1;
+  const auto out = g.step(w.next());
+  const auto ref = twin.step(tw.next());
+  EXPECT_EQ(ref.actor, Actor::kSafetyLayer);
+  EXPECT_EQ(out.state, State::kNormal);  // not an MRM: the RTA Switch does not latch
+  EXPECT_EQ(out.rss_outcome, rss::Outcome::kUnsafe);
+  EXPECT_NE(out.rss_reasons & rss::reason::kDangerousAhead, 0U);
+  EXPECT_EQ(out.rta_mode, RtaMode::kRecovery);
+  EXPECT_EQ(out.actor, Actor::kGuardianRss);
+  EXPECT_DOUBLE_EQ(out.command.accel_mps2, L::kRtaRecoveryDecel_mps2);  // step, no jerk ramp
+  EXPECT_DOUBLE_EQ(out.command.speed_mps, 0.0);
+  EXPECT_DOUBLE_EQ(out.command.steering_angle_rad, ref.command.steering_angle_rad);  // kept
+}
+
+TEST(GuardianRss, RecoveryAndRssAreLoggedOnceNotEveryCycle)
+{
+  GuardianEventLog log;
+  Guardian g(&log);
+  World w;
+  arm(g, w);
+  w.objects[0] = stopped_car_ahead(10.0);
+  w.num_objects = 1;
+  for (int i = 0; i < 50; ++i) {
+    (void)g.step(w.next());
+  }
+  int rta = 0;
+  int rss_events = 0;
+  Event e;
+  while (log.pop(e)) {
+    rta += e.code == EventCode::kRtaSwitch ? 1 : 0;
+    rss_events += e.code == EventCode::kRssOutcome ? 1 : 0;
+  }
+  EXPECT_EQ(rta, 1);
+  EXPECT_EQ(rss_events, 1);
+}
+
+TEST(GuardianRss, ReturnsToTheComplexFunctionOnlyAfterTheHysteresisWindow)
+{
+  Guardian g;
+  World w;
+  arm(g, w);
+  w.objects[0] = stopped_car_ahead(10.0);
+  w.num_objects = 1;
+  (void)g.step(w.next());
+  w.num_objects = 0;  // the car is gone
+  const TimeNs cleared = w.now() + L::kCyclePeriod_ns;
+  CycleOutput out;
+  do {
+    out = g.step(w.next());
+    if (w.now() - cleared < L::kRtaHysteresis_ns) {
+      ASSERT_EQ(out.actor, Actor::kGuardianRss) << "released early at " << (w.now() - cleared);
+      ASSERT_DOUBLE_EQ(out.command.accel_mps2, L::kRtaRecoveryDecel_mps2);
+    }
+  } while (out.actor == Actor::kGuardianRss && w.now() < cleared + 5 * L::kRtaHysteresis_ns);
+  EXPECT_EQ(out.actor, Actor::kSafetyLayer);
+  EXPECT_EQ(out.rta_mode, RtaMode::kComplexFunction);
+  EXPECT_EQ(w.now() - cleared, L::kRtaHysteresis_ns);
+  EXPECT_EQ(out.state, State::kNormal);
+}
+
+TEST(GuardianRss, RestrictClampsTheCommandAndKeepsTheComplexFunction)
+{
+  Guardian g;
+  World w;
+  w.accel_cmd = 3.0;  // inside the validator envelope (5.5), above the RSS ego a_max (2.0)
+  const auto out = arm(g, w);
+  EXPECT_EQ(out.verdict, Verdict::kPass);
+  EXPECT_EQ(out.rss_outcome, rss::Outcome::kRestrict);
+  EXPECT_NE(out.rss_reasons & rss::reason::kAccelClamped, 0U);
+  EXPECT_EQ(out.actor, Actor::kSafetyLayer);
+  EXPECT_DOUBLE_EQ(out.command.accel_mps2, rss::params::kEgo.lon_accel_max_mps2);
+}
+
+TEST(GuardianRss, RssBoundOverridesTheMrmJerkRamp)
+{
+  Guardian g;
+  World w;
+  arm(g, w);
+  w.safety_up = false;  // ROS 2 layer gone -> Guardian comfortable MRM (ramped)
+  CycleOutput out;
+  do {
+    out = g.step(w.next());
+  } while (out.state != State::kMrmComfortable);
+  EXPECT_GT(out.command.accel_mps2, L::kMrmComfortableDecel_mps2);  // still ramping
+  w.objects[0] = stopped_car_ahead(10.0);
+  w.num_objects = 1;
+  out = g.step(w.next());
+  EXPECT_EQ(out.state, State::kMrmComfortable);
+  EXPECT_EQ(out.actor, Actor::kGuardianMrm);
+  EXPECT_DOUBLE_EQ(out.command.accel_mps2, -rss::params::kEgo.lon_brake_min_mps2);
+}
+
+TEST(GuardianRss, StaleIndependentChannelGoesEmergencyAndBrakes)
+{
+  Guardian g;
+  World w;
+  arm(g, w);
+  w.world_up = false;
+  const TimeNs lost_at = w.now();
+  CycleOutput out;
+  do {
+    out = g.step(w.next());
+  } while (out.state == State::kNormal && w.now() < lost_at + 1'000'000'000);
+  EXPECT_EQ(out.state, State::kMrmEmergency);
+  EXPECT_LE(w.now() - lost_at, L::kIndependentMaxAge_ns + L::kCyclePeriod_ns);
+  EXPECT_EQ(out.rss_outcome, rss::Outcome::kUnsafe);
+  EXPECT_NE(out.rss_reasons & rss::reason::kNoIndependentData, 0U);
+  EXPECT_DOUBLE_EQ(out.command.accel_mps2, -rss::params::kEgo.lon_brake_min_mps2);
+}
+
+TEST(GuardianRss, ResetNeedsTheIndependentChannel)
+{
+  Guardian g;
+  World w;
+  w.world_up = false;  // never received
+  CycleInputs in = w.next();
+  in.operator_reset = true;
+  EXPECT_EQ(g.step(in).state, State::kStopped);
+}
+
+TEST(GuardianRss, ResetIntoAnUnsafeSituationBrakesAtOnce)
+{
+  Guardian g;
+  World w;
+  w.objects[0] = stopped_car_ahead(10.0);
+  w.num_objects = 1;
+  const auto out = arm(g, w);
+  EXPECT_EQ(out.state, State::kNormal);
+  EXPECT_EQ(out.actor, Actor::kGuardianRss);
+  EXPECT_DOUBLE_EQ(out.command.accel_mps2, L::kRtaRecoveryDecel_mps2);
+}
+
+TEST(GuardianRss, TooManyObjectsIsUnsafe)
+{
+  Guardian g;
+  World w;
+  arm(g, w);
+  CycleInputs in = w.next();
+  in.world.count = rss::params::kMaxObjects + 1U;
+  const auto out = g.step(in);
+  EXPECT_EQ(out.rss_outcome, rss::Outcome::kUnsafe);
+  EXPECT_NE(out.rss_reasons & rss::reason::kTooManyObjects, 0U);
+  EXPECT_EQ(out.actor, Actor::kGuardianRss);
+}
+
+TEST(GuardianRss, StoppedHoldIsNotSoftenedButStaysWithinRssBounds)
+{
+  Guardian g;
+  World w;
+  w.objects[0] = stopped_car_ahead(10.0);
+  w.num_objects = 1;
+  const auto out = g.step(w.next());  // not armed: STOPPED
+  EXPECT_EQ(out.state, State::kStopped);
+  EXPECT_LE(out.command.accel_mps2, L::kStopHoldAccel_mps2);
+  EXPECT_GE(out.command.accel_mps2, -rss::params::kEgo.lon_brake_max_mps2);
 }

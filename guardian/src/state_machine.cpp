@@ -63,13 +63,15 @@ State decide(State current, const Health & h) noexcept
 
   if (current == State::kStopped) {
     const bool all_healthy = h.doer_alive && h.safety_layer_alive && h.command_fresh &&
-                             h.vehicle_status_fresh && !h.internal_fault &&
+                             h.vehicle_status_fresh && h.independent_fresh && !h.internal_fault &&
                              !h.deadline_missed && !h.reject_limit_reached;
     return (h.operator_reset && all_healthy) ? State::kNormal : State::kStopped;
   }
 
-  // Emergency class: the Guardian itself or its view of the vehicle is compromised.
-  const bool emergency = h.internal_fault || h.deadline_missed || !h.vehicle_status_fresh;
+  // Emergency class: the Guardian itself or its own view of the vehicle and the world (the
+  // independent channel RSS runs on) is compromised.
+  const bool emergency =
+    h.internal_fault || h.deadline_missed || !h.vehicle_status_fresh || !h.independent_fresh;
 
   if (is_mrm(current)) {
     // Latched until standstill. Standstill needs trustworthy speed feedback.
@@ -83,11 +85,11 @@ State decide(State current, const Health & h) noexcept
   if (emergency) {
     return State::kMrmEmergency;
   }
-  // The ROS 2 safety layer is not trustworthy: the Guardian takes over (FR-MRM-2).
+  // The ROS 2 safety layer is not trustworthy: the Guardian takes over.
   if (!h.safety_layer_alive || !h.command_fresh || h.reject_limit_reached) {
     return State::kMrmComfortable;
   }
-  // Doer gone but safety layer healthy: Autoware's ported MRM drives the stop (FR-MRM-1).
+  // Doer gone but safety layer healthy: Autoware's ported MRM drives the stop.
   if (!h.doer_alive) {
     return State::kDegraded;
   }

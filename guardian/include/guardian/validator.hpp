@@ -1,7 +1,7 @@
 // Copyright 2026 Ahmed Wafdy
 // SPDX-License-Identifier: Apache-2.0
 //
-// Final command validation (FR-CV-1..4). Independent of Autoware's control_validator and
+// Final command validation. Independent of Autoware's control_validator and
 // vehicle_cmd_gate (defense in depth). Pure, allocation-free, noexcept.
 //
 // Order of checks:

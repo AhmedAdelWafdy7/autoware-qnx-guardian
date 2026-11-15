@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // POSIX (Linux) Guardian loop: absolute-deadline clock_nanosleep on CLOCK_MONOTONIC.
-// Exists for host development and as the Linux baseline in the QNX-vs-Linux benchmark
-// (NFR-T-3). The QNX build uses main_qnx.cpp (timer_create + pulse) instead.
+// Exists for host development and as the Linux baseline in the QNX-vs-Linux benchmark.
+// The QNX build uses main_qnx.cpp (timer_create + pulse) instead.
 //
 // Skeleton: inputs are not wired to the bridge yet (TODO(bridge)), so the Guardian stays in
 // its power-on STOPPED state; the loop timing is real.

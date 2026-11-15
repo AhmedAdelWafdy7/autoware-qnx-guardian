@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // Heartbeat supervision for the Autoware doer (Linux) and the ported ROS 2 safety layer
-// (QNX) — FR-HB-1..5. Single-threaded: owned by the Guardian cycle; the bridge hands over
+// (QNX). Single-threaded: owned by the Guardian cycle; the bridge hands over
 // the latest sample per source each cycle (see bridge/). Allocation-free, noexcept.
 
 #ifndef GUARDIAN__HEARTBEAT_MONITOR_HPP_
@@ -27,7 +27,7 @@ class HeartbeatMonitor
 {
 public:
   /// Feed the latest sample for `src`. A sample with the same receive time as last cycle is
-  /// "nothing new". A new message whose seq did not advance is a frozen publisher (FR-HB-5)
+  /// "nothing new". A new message whose seq did not advance is a frozen publisher
   /// and does NOT refresh liveness.
   void update(Source src, const HeartbeatSample & sample) noexcept;
 

@@ -17,6 +17,7 @@ set(GUARDIAN_WARNINGS -Wall -Wextra -Werror -Wpedantic -Wshadow -Wconversion -Ws
 add_library(guardian_core STATIC
   src/guardian.cpp
   src/heartbeat_monitor.cpp
+  src/rta_switch.cpp
   src/state_machine.cpp
   src/validator.cpp
 )
@@ -75,6 +76,7 @@ if(GUARDIAN_BUILD_TESTS)
     test/test_event_log.cpp
     test/test_guardian.cpp
     test/test_rss.cpp
+    test/test_rta_switch.cpp
   )
   target_link_libraries(guardian_tests PRIVATE guardian_core guardian_rss GTest::gtest_main)
   target_compile_options(guardian_tests PRIVATE -Wall -Wextra -Werror)
