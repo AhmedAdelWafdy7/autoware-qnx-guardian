@@ -17,6 +17,11 @@ set(CMAKE_C_COMPILER_TARGET ${QNX_COMPILER_TARGET})
 set(CMAKE_CXX_COMPILER q++)
 set(CMAKE_CXX_COMPILER_TARGET ${QNX_COMPILER_TARGET})
 
+# QNX binutils, not whatever `ar` the host has: CMake does not derive them for qcc, and a
+# host without binutils (the SDP container) would end up with CMAKE_AR-NOTFOUND.
+set(CMAKE_AR $ENV{QNX_HOST}/usr/bin/ntox86_64-ar CACHE FILEPATH "QNX archiver")
+set(CMAKE_RANLIB $ENV{QNX_HOST}/usr/bin/ntox86_64-ranlib CACHE FILEPATH "QNX ranlib")
+
 set(CMAKE_SYSROOT $ENV{QNX_TARGET})
 set(CMAKE_FIND_ROOT_PATH $ENV{QNX_TARGET} $ENV{QNX_TARGET}/x86_64)
 set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
