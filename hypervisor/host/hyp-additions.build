@@ -1,0 +1,37 @@
+################################################################################################
+## Copyright 2026 Ahmed Wafdy
+## SPDX-License-Identifier: Apache-2.0
+##
+## QNX Hypervisor host additions for the Raspberry Pi 5 (BCM2712).
+## build.sh appends this to the Pi 5 BSP buildfile (images/rpi5.build, not in this repo) and
+## adds "-Q enable" to the startup line. Everything else in the host image is the stock BSP.
+##
+## @GUEST_DIR@ is replaced by build.sh with the host path of the built guest files.
+################################################################################################
+
+## ---- Hypervisor -----------------------------------------------------------------------------
+## On AArch64 the hypervisor is always "qvm" (one qvm process per guest).
+[uid=0 gid=0 perms=0755] /sbin/qvm=qvm
+## Reports whether the host is set up to run a hypervisor (exit 0 = yes).
+[uid=0 gid=0 perms=0755] /bin/qvm-check=qvm-check
+
+## Virtual devices used by the guest configs (only what the guests need).
+/lib/dll/vdev-pl011.so=vdev-pl011.so
+/lib/dll/vdev-virtio-console.so=vdev-virtio-console.so
+
+## ---- Guests ---------------------------------------------------------------------------------
+## QNX guest: the Checker (ported Autoware safety layer + Guardian RT core).
+/guests/qnx-guardian/qnx-guardian.qvmconf=@GUEST_DIR@/qnx-guardian.qvmconf
+/guests/qnx-guardian/qnx-guardian.ifs=@GUEST_DIR@/qnx-guardian.ifs
+
+## ---- Start-up hook --------------------------------------------------------------------------
+## The BSP start-up script runs /scripts/board_startup.sh if it exists (customize_startup.sh).
+[uid=0 gid=0 perms=0755] /scripts/board_startup.sh = {
+#!/bin/ksh
+echo "Hypervisor host: qvm-check ..."
+qvm-check
+echo "Starting QNX guest qnx-guardian ..."
+# qvm resolves the 'load' path in the config relative to the current directory.
+cd /guests/qnx-guardian
+qvm @qnx-guardian.qvmconf &
+}

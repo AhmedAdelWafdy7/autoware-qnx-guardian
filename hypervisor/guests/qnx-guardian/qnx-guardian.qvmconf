@@ -1,0 +1,29 @@
+# Copyright 2026 Ahmed Wafdy
+# SPDX-License-Identifier: Apache-2.0
+#
+# QNX guest on the Pi 5 hypervisor host: the Checker (Recovery Function + Guardian RT core).
+# First bring-up config: one vCPU and a console, no networking yet.
+# Device addresses and interrupts must match the guest image (hyp-guest-arm BSP, guest-1):
+#   devc-virtio 0x20000000,42 is its console; startup prints on the PL011 at 0x1c090000.
+
+system qnx-guardian
+
+# Guest-physical RAM. TODO(verify): size once ROS 2 + the ported safety layer run in the guest.
+ram 0x80000000,512M
+
+# One vCPU pinned to physical core 3, so the Linux guest (Autoware) can get cores 0-2.
+# TODO(verify): vCPU scheduling priority above the Linux guest's vCPUs (isolation measurements).
+cpu runmask 3
+
+load qnx-guardian.ifs
+
+# Startup output of the guest goes to qvm's stdout.
+vdev pl011
+    hostdev >-
+    loc 0x1c090000
+    intr gic:37
+
+# Main guest console.
+vdev virtio-console
+    loc 0x20000000
+    intr gic:42
