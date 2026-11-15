@@ -1,0 +1,79 @@
+# Upstream sources for the Autoware -> QNX 8.0 port. Imported with:
+#   vcs import port/src < port/autoware.repos
+# port/src is never committed: upstream code is referenced, not copied.
+#
+# Distro: Jazzy. Pin Autoware repos to the tags used by the Autoware Jazzy Docker image on the
+# PC (the Doer). TODO(verify): that image tag still matches the meta-autoware 1.9.0 pins below;
+# if it does not, re-pin here and re-check where each package lives (Autoware 2.0 moved packages).
+#
+# Pins match meta-autoware (ROS 2 Jazzy / scarthgap), whose recipes were
+# generated from Autoware release 1.9.0 (`repositories/autoware.repos` at tag 1.9.0).
+# Each SHA below is the SRCREV used by every meta-autoware recipe from that repo
+# (one SHA per repo, verified 2026-11-04). Tags noted where `git ls-remote --tags` resolves.
+# Never pin a branch.
+repositories:
+  autoware_universe:
+    type: git
+    url: https://github.com/autowarefoundation/autoware_universe.git
+    version: 6e477c645efec33f7909095eea684474e97f5e3d   # tag 0.52.0
+  autoware_core:
+    type: git
+    url: https://github.com/autowarefoundation/autoware_core.git
+    version: f25f83c632c1984ec276c894c41857d4abc0dad8   # tag 1.9.0
+  autoware_utils:
+    type: git
+    url: https://github.com/autowarefoundation/autoware_utils.git
+    version: 1a0ebbc8cb955e49ec28163a3a7953dc7fa4c312
+  autoware_cmake:
+    type: git
+    url: https://github.com/autowarefoundation/autoware_cmake.git
+    version: ac910018c8b7fb29a59ee62e1f57e83c686b5632
+  autoware_msgs:
+    type: git
+    url: https://github.com/autowarefoundation/autoware_msgs.git
+    version: bb8e7bf5d97168663e0e7b357929e4fcdbd3a967
+  autoware_internal_msgs:
+    type: git
+    url: https://github.com/autowarefoundation/autoware_internal_msgs.git
+    version: ec3722332b6c9e158ddd43a8d7ba444bfe42ba01
+  autoware_adapi_msgs:
+    type: git
+    url: https://github.com/autowarefoundation/autoware_adapi_msgs.git
+    version: 35a7aeb97dfbbbc363c49fc032ded0c8ba172e24
+  tier4_autoware_msgs:
+    type: git
+    url: https://github.com/tier4/tier4_autoware_msgs.git
+    version: 00d0ddcb4763e64128c910628a1891816b86844b
+  # ros/diagnostics (diagnostic_updater): not in qnx-ports' ros2-jazzy (build-files or APK).
+  # Same version as meta-ros (scarthgap/jazzy) on the Linux side. Packaged into the
+  # ros2-jazzy-autoware-safety APK.
+  diagnostics:
+    type: git
+    url: https://github.com/ros/diagnostics.git
+    version: 809c7da54886cc2cca8923125282e6a73e1fa276   # tag 4.2.7 (meta-ros jazzy diagnostic-updater 4.2.7)
+  # geographic_msgs: needed by autoware_adapi_v1_msgs; not in the ros2-jazzy APK (checked
+  # 2026-11-09). Only the geographic_msgs package is built (geodesy is not needed).
+  geographic_info:
+    type: git
+    url: https://github.com/ros-geographic-info/geographic_info.git
+    version: 24806adc767414eb3a34a58aefeb648ee415b09a   # tag 1.0.6 (= jazzy branch head)
+  # Third-party. Superseded on QNX by the aports `fmt` APK (12.1.0); kept until that APK is
+  # verified with autoware_utils_debug. Same version as meta-oe scarthgap fmt_10.2.1.bb.
+  fmt:
+    type: git
+    url: https://github.com/fmtlib/fmt.git
+    version: e69e5f977d458f2650bb346dadf2ad30c5320281   # tag 10.2.1
+  # agnocast is NOT imported: autoware_agnocast_wrapper builds in plain-rclcpp mode when the
+  # ENABLE_AGNOCAST env var is unset (see its CMakeLists.txt/package.xml conditions).
+  # Fallback only: source build of ROS 2 (Humble, or ros2-jazzy) if the ros2-jazzy APK fails
+  # on the Pi 5 (decision Nov 9). Primary path is `apk add ros2-jazzy` from qnx-ports/aports.
+  qnx_build_files:
+    type: git
+    url: https://github.com/qnx-ports/build-files.git
+    version: 1964dba24df0b5360bf98b817717f1c5b04224e5   # main HEAD 2026-11-04; provides ports/ros2, eigen, boost, glog
+  # Reference for APK conventions (extra/ros2-jazzy/APKBUILD, extra/fmt/APKBUILD, CODEOWNERS).
+  # Commented out until pinned: vcs import fails on a non-existent version.
+  # qnx_aports:
+  #   type: git
+  #   url: https://github.com/qnx-ports/aports.git
+  #   version: TODO_PIN   # commit SHA

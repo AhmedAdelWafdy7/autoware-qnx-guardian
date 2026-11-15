@@ -1,0 +1,52 @@
+From: autoware-qnx-guardian
+Subject: [PATCH] autoware_mrm_emergency_stop_operator: depend on autoware_utils_rclcpp instead of autoware_utils
+
+Replace autoware_utils/ros/update_param.hpp with autoware_utils_rclcpp/parameter.hpp.
+
+Why: the autoware_utils metapackage depends on autoware_utils_pcl -> pcl_ros/PCL,
+which is not available on QNX 8.0 and is out of scope for this port. The package
+only uses forwarding headers from autoware_utils; depending on the sub-packages they
+forward to is behaviour-identical and builds unchanged on Linux.
+
+Upstream: TODO (autoware_universe PR: narrow autoware_utils deps to sub-packages)
+Applies to: autoware_universe 6e477c645efec33f7909095eea684474e97f5e3d (0.52.0)
+---
+ system/autoware_mrm_emergency_stop_operator/package.xml               | 2 +-
+ .../src/mrm_emergency_stop_operator_core.cpp                          | 4 ++--
+ 2 files changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/system/autoware_mrm_emergency_stop_operator/package.xml b/system/autoware_mrm_emergency_stop_operator/package.xml
+index dfff1f3..bd8ea3b 100644
+--- a/system/autoware_mrm_emergency_stop_operator/package.xml
++++ b/system/autoware_mrm_emergency_stop_operator/package.xml
+@@ -14,7 +14,7 @@
+ 
+   <depend>autoware_adapi_v1_msgs</depend>
+   <depend>autoware_control_msgs</depend>
+-  <depend>autoware_utils</depend>
++  <depend>autoware_utils_rclcpp</depend>
+   <depend>rclcpp</depend>
+   <depend>rclcpp_components</depend>
+   <depend>std_msgs</depend>
+diff --git a/system/autoware_mrm_emergency_stop_operator/src/mrm_emergency_stop_operator_core.cpp b/system/autoware_mrm_emergency_stop_operator/src/mrm_emergency_stop_operator_core.cpp
+index dffea4b..c12898a 100644
+--- a/system/autoware_mrm_emergency_stop_operator/src/mrm_emergency_stop_operator_core.cpp
++++ b/system/autoware_mrm_emergency_stop_operator/src/mrm_emergency_stop_operator_core.cpp
+@@ -14,7 +14,7 @@
+ 
+ #include "mrm_emergency_stop_operator_core.hpp"
+ 
+-#include <autoware_utils/ros/update_param.hpp>
++#include <autoware_utils_rclcpp/parameter.hpp>
+ 
+ #include <vector>
+ 
+@@ -70,7 +70,7 @@ MrmEmergencyStopOperator::MrmEmergencyStopOperator(const rclcpp::NodeOptions & n
+ rcl_interfaces::msg::SetParametersResult MrmEmergencyStopOperator::onParameter(
+   const std::vector<rclcpp::Parameter> & parameters)
+ {
+-  using autoware_utils::update_param;
++  using autoware_utils_rclcpp::update_param;
+   update_param<double>(parameters, "target_acceleration", params_.target_acceleration);
+   update_param<double>(parameters, "target_jerk", params_.target_jerk);
+ 

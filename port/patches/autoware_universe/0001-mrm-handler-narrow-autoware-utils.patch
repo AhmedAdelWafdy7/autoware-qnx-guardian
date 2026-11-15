@@ -1,0 +1,74 @@
+From: autoware-qnx-guardian
+Subject: [PATCH] autoware_mrm_handler: depend on autoware_utils_rclcpp instead of autoware_utils
+
+Replace autoware_utils/ros/polling_subscriber.hpp with autoware_utils_rclcpp/polling_subscriber.hpp and declare the diagnostic_msgs dependency that was previously only pulled in transitively.
+
+Why: the autoware_utils metapackage depends on autoware_utils_pcl -> pcl_ros/PCL,
+which is not available on QNX 8.0 and is out of scope for this port. The package
+only uses forwarding headers from autoware_utils; depending on the sub-packages they
+forward to is behaviour-identical and builds unchanged on Linux.
+
+Upstream: TODO (autoware_universe PR: narrow autoware_utils deps to sub-packages)
+Applies to: autoware_universe 6e477c645efec33f7909095eea684474e97f5e3d (0.52.0)
+---
+ .../include/autoware/mrm_handler/mrm_handler_core.hpp  | 18 ++++++++++--------
+ system/autoware_mrm_handler/package.xml                |  3 ++-
+ 2 files changed, 12 insertions(+), 9 deletions(-)
+
+diff --git a/system/autoware_mrm_handler/include/autoware/mrm_handler/mrm_handler_core.hpp b/system/autoware_mrm_handler/include/autoware/mrm_handler/mrm_handler_core.hpp
+index b68707e..55b6d7e 100644
+--- a/system/autoware_mrm_handler/include/autoware/mrm_handler/mrm_handler_core.hpp
++++ b/system/autoware_mrm_handler/include/autoware/mrm_handler/mrm_handler_core.hpp
+@@ -22,7 +22,7 @@
+ #include <variant>
+ 
+ // Autoware
+-#include <autoware_utils/ros/polling_subscriber.hpp>
++#include <autoware_utils_rclcpp/polling_subscriber.hpp>
+ 
+ #include <autoware_adapi_v1_msgs/msg/mrm_state.hpp>
+ #include <autoware_adapi_v1_msgs/msg/operation_mode_state.hpp>
+@@ -83,19 +83,21 @@ private:
+   rclcpp::Subscription<tier4_system_msgs::msg::OperationModeAvailability>::SharedPtr
+     sub_operation_mode_availability_;
+   // Subscribers without callback
+-  autoware_utils::InterProcessPollingSubscriber<nav_msgs::msg::Odometry> sub_odom_{
++  autoware_utils_rclcpp::InterProcessPollingSubscriber<nav_msgs::msg::Odometry> sub_odom_{
+     this, "~/input/odometry"};
+-  autoware_utils::InterProcessPollingSubscriber<autoware_vehicle_msgs::msg::ControlModeReport>
++  autoware_utils_rclcpp::InterProcessPollingSubscriber<
++    autoware_vehicle_msgs::msg::ControlModeReport>
+     sub_control_mode_{this, "~/input/control_mode"};
+-  autoware_utils::InterProcessPollingSubscriber<tier4_system_msgs::msg::MrmBehaviorStatus>
++  autoware_utils_rclcpp::InterProcessPollingSubscriber<tier4_system_msgs::msg::MrmBehaviorStatus>
+     sub_mrm_pull_over_status_{this, "~/input/mrm/pull_over/status"};
+-  autoware_utils::InterProcessPollingSubscriber<tier4_system_msgs::msg::MrmBehaviorStatus>
++  autoware_utils_rclcpp::InterProcessPollingSubscriber<tier4_system_msgs::msg::MrmBehaviorStatus>
+     sub_mrm_comfortable_stop_status_{this, "~/input/mrm/comfortable_stop/status"};
+-  autoware_utils::InterProcessPollingSubscriber<tier4_system_msgs::msg::MrmBehaviorStatus>
++  autoware_utils_rclcpp::InterProcessPollingSubscriber<tier4_system_msgs::msg::MrmBehaviorStatus>
+     sub_mrm_emergency_stop_status_{this, "~/input/mrm/emergency_stop/status"};
+-  autoware_utils::InterProcessPollingSubscriber<autoware_adapi_v1_msgs::msg::OperationModeState>
++  autoware_utils_rclcpp::InterProcessPollingSubscriber<
++    autoware_adapi_v1_msgs::msg::OperationModeState>
+     sub_operation_mode_state_{this, "~/input/api/operation_mode/state"};
+-  autoware_utils::InterProcessPollingSubscriber<autoware_vehicle_msgs::msg::GearCommand>
++  autoware_utils_rclcpp::InterProcessPollingSubscriber<autoware_vehicle_msgs::msg::GearCommand>
+     sub_gear_cmd_{this, "~/input/gear"};
+ 
+   tier4_system_msgs::msg::OperationModeAvailability::ConstSharedPtr operation_mode_availability_;
+diff --git a/system/autoware_mrm_handler/package.xml b/system/autoware_mrm_handler/package.xml
+index 8127f98..4cce939 100644
+--- a/system/autoware_mrm_handler/package.xml
++++ b/system/autoware_mrm_handler/package.xml
+@@ -14,8 +14,9 @@
+ 
+   <depend>autoware_adapi_v1_msgs</depend>
+   <depend>autoware_qos_utils</depend>
+-  <depend>autoware_utils</depend>
++  <depend>autoware_utils_rclcpp</depend>
+   <depend>autoware_vehicle_msgs</depend>
++  <depend>diagnostic_msgs</depend>
+   <depend>nav_msgs</depend>
+   <depend>rclcpp</depend>
+   <depend>rclcpp_components</depend>
