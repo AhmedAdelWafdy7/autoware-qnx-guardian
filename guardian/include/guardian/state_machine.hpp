@@ -1,7 +1,7 @@
 // Copyright 2026 Ahmed Wafdy
 // SPDX-License-Identifier: Apache-2.0
 //
-// Guardian MRM state machine (FR-MRM-3, FR-MRM-5).
+// Guardian MRM state machine.
 //
 //   NORMAL ──► DEGRADED ──► MRM_COMFORTABLE ──► MRM_EMERGENCY ──► STOPPED
 //     ▲  ◄──────┘  │                │  ▲                            │
@@ -34,6 +34,7 @@ struct Health
   bool safety_layer_alive{false};     ///< ported ROS 2 safety layer heartbeat fresh
   bool command_fresh{false};          ///< latest safety-layer command within max age
   bool vehicle_status_fresh{false};   ///< speed/steering feedback within max age
+  bool independent_fresh{false};      ///< independent object channel (RSS input) within max age
   bool reject_limit_reached{false};   ///< N consecutive validator REJECTs
   bool internal_fault{false};         ///< Guardian self-check failed
   bool deadline_missed{false};        ///< Guardian cycle overran

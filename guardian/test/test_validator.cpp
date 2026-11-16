@@ -1,7 +1,7 @@
 // Copyright 2026 Ahmed Wafdy
 // SPDX-License-Identifier: Apache-2.0
 //
-// FR-CV-1..4: PASS / CLAMP / REJECT, each with its reason.
+// PASS / CLAMP / REJECT, each with its reason.
 
 #include <gtest/gtest.h>
 

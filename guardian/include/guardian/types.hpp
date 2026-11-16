@@ -45,12 +45,12 @@ enum class Source : std::uint8_t
 };
 inline constexpr std::uint32_t kNumSources = 2U;
 
-/// Guardian MRM state machine (FR-MRM-3).
+/// Guardian MRM state machine.
 enum class State : std::uint8_t
 {
   kNormal = 0,
-  kDegraded = 1,        ///< doer lost; Autoware's ported MRM on QNX is in charge (FR-MRM-1)
-  kMrmComfortable = 2,  ///< Guardian's own comfortable stop (FR-MRM-2)
+  kDegraded = 1,        ///< doer lost; Autoware's ported MRM on QNX is in charge
+  kMrmComfortable = 2,  ///< Guardian's own comfortable stop
   kMrmEmergency = 3,    ///< Guardian's own emergency stop
   kStopped = 4,         ///< latched; operator reset required
 };
@@ -58,7 +58,7 @@ inline constexpr std::uint32_t kNumStates = 5U;
 
 const char * to_string(State s) noexcept;
 
-/// Validator outcome (FR-CV-2). Never silent: CLAMP and REJECT are always logged.
+/// Validator outcome. Never silent: CLAMP and REJECT are always logged.
 enum class Verdict : std::uint8_t
 {
   kPass = 0,

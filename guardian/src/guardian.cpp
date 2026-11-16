@@ -18,7 +18,38 @@ bool fresh(TimeNs rx, TimeNs now, TimeNs max_age) noexcept
 {
   return rx <= now && (now - rx) <= max_age;
 }
+
+double clamp(double v, double lo, double hi) noexcept
+{
+  return v < lo ? lo : (v > hi ? hi : v);
+}
 }  // namespace
+
+rss::Result Guardian::evaluate_rss(
+  const CycleInputs & in, bool world_fresh, double commanded_accel_mps2) noexcept
+{
+  if (!world_fresh) {
+    // No trustworthy view of the world: treat as UNSAFE (fail safe), proper-response bounds.
+    rss::Result r;
+    r.outcome = rss::Outcome::kUnsafe;
+    r.reasons = rss::reason::kNoIndependentData;
+    r.accel_min_mps2 = -rss::params::kEgo.lon_brake_max_mps2;
+    r.accel_max_mps2 = -rss::params::kEgo.lon_brake_min_mps2;
+    r.accel_mps2 = std::isfinite(commanded_accel_mps2)
+                     ? clamp(commanded_accel_mps2, r.accel_min_mps2, r.accel_max_mps2)
+                     : r.accel_max_mps2;
+    return r;
+  }
+  const std::uint32_t count = in.world.count;
+  if (count > rss::params::kMaxObjects) {
+    // evaluate() rejects the count before reading any situation.
+    return rss::evaluate(situations_, count, commanded_accel_mps2);
+  }
+  for (std::uint32_t i = 0U; i < count; ++i) {  // bounded: count <= kMaxObjects
+    situations_[i] = rss::make_situation(in.world.ego, in.world.objects[i]);
+  }
+  return rss::evaluate(situations_, count, commanded_accel_mps2);
+}
 
 void Guardian::log(
   TimeNs t, EventCode code, std::uint8_t a, std::uint8_t b, std::uint32_t reasons,
@@ -115,12 +146,17 @@ CycleOutput Guardian::step(const CycleInputs & in) noexcept
     reject_streak_ = 0U;
   }
 
+  // 3b. Independent channel (RSS input).
+  const bool world_fresh =
+    in.have_world && fresh(in.world.rx_time_ns, now, limits::kIndependentMaxAge_ns);
+
   // 4. State machine.
   Health h;
   h.doer_alive = doer_alive;
   h.safety_layer_alive = safety_alive;
   h.command_fresh = command_fresh;
   h.vehicle_status_fresh = status_fresh;
+  h.independent_fresh = world_fresh;
   h.reject_limit_reached = reject_streak_ >= limits::kMaxConsecutiveRejects;
   h.internal_fault = in.internal_fault;
   h.deadline_missed = in.deadline_missed;
@@ -165,6 +201,41 @@ CycleOutput Guardian::step(const CycleInputs & in) noexcept
     out.command = mrm_command(state, now);
     out.actor = Actor::kGuardianMrm;
   }
+
+  // 6. RSS on the independent channel, against the command we are about to output.
+  const rss::Result r = evaluate_rss(in, world_fresh, out.command.accel_mps2);
+  out.rss_outcome = r.outcome;
+  out.rss_reasons = r.reasons;
+  if (r.outcome != last_rss_outcome_ || r.reasons != last_rss_reasons_) {
+    if (r.outcome != rss::Outcome::kSafe || last_rss_outcome_ != rss::Outcome::kSafe) {
+      log(now, EventCode::kRssOutcome, static_cast<std::uint8_t>(r.outcome), 0U, r.reasons,
+          r.worst_index);
+    }
+    last_rss_outcome_ = r.outcome;
+    last_rss_reasons_ = r.reasons;
+  }
+
+  // 7. RTA Switch. Stepped every cycle, so its hysteresis window also runs during MRM.
+  const RtaMode mode_before = rta_.mode();
+  const RtaMode mode = rta_.step(r.outcome, now);
+  out.rta_mode = mode;
+  if (mode != mode_before) {
+    log(now, EventCode::kRtaSwitch, static_cast<std::uint8_t>(mode_before),
+        static_cast<std::uint8_t>(mode), r.reasons, 0);
+  }
+  if (mode == RtaMode::kRecovery && (state == State::kNormal || state == State::kDegraded)) {
+    // Recovery Function: keep the validated steering, step-brake longitudinally.
+    if (out.command.accel_mps2 > limits::kRtaRecoveryDecel_mps2) {
+      out.command.accel_mps2 = limits::kRtaRecoveryDecel_mps2;
+    }
+    out.command.speed_mps = 0.0;
+    out.actor = Actor::kGuardianRss;
+  }
+
+  // 8. RSS envelope on every output (any actor, MRM included), applied without a ramp.
+  out.command.accel_mps2 = std::isfinite(out.command.accel_mps2)
+                             ? clamp(out.command.accel_mps2, r.accel_min_mps2, r.accel_max_mps2)
+                             : r.accel_max_mps2;  // cannot happen (validated); fail safe anyway
 
   last_out_ = out.command;
   have_last_out_ = true;

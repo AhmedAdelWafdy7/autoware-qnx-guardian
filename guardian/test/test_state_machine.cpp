@@ -1,7 +1,7 @@
 // Copyright 2026 Ahmed Wafdy
 // SPDX-License-Identifier: Apache-2.0
 //
-// FR-MRM-3 / FR-MRM-5: every transition, legal and illegal, is tested.
+// every transition, legal and illegal, is tested.
 
 #include <gtest/gtest.h>
 
@@ -27,6 +27,7 @@ Health healthy()
   h.safety_layer_alive = true;
   h.command_fresh = true;
   h.vehicle_status_fresh = true;
+  h.independent_fresh = true;
   return h;
 }
 
@@ -81,9 +82,9 @@ TEST(TransitionTable, OutOfRangeStatesAreNeverAllowed)
 
 TEST(TransitionTable, DecideOnlyEverProducesAllowedTransitions)
 {
-  // Exhaustive over all 2^9 health combinations and all states.
+  // Exhaustive over all 2^10 health combinations and all states.
   for (State s : kAll) {
-    for (std::uint32_t bits = 0; bits < (1U << 9U); ++bits) {
+    for (std::uint32_t bits = 0; bits < (1U << 10U); ++bits) {
       Health h;
       h.doer_alive = (bits & 1U) != 0U;
       h.safety_layer_alive = (bits & 2U) != 0U;
@@ -94,6 +95,7 @@ TEST(TransitionTable, DecideOnlyEverProducesAllowedTransitions)
       h.deadline_missed = (bits & 64U) != 0U;
       h.stopped_for_hold_time = (bits & 128U) != 0U;
       h.operator_reset = (bits & 256U) != 0U;
+      h.independent_fresh = (bits & 512U) != 0U;
       const State t = decide(s, h);
       EXPECT_TRUE(is_allowed_transition(s, t))
         << guardian::to_string(s) << " -> " << guardian::to_string(t) << " bits=" << bits;
@@ -149,6 +151,9 @@ TEST(Decide, EmergencyClassFaults)
     h = healthy();
     h.vehicle_status_fresh = false;
     EXPECT_EQ(decide(s, h), State::kMrmEmergency);
+    h = healthy();
+    h.independent_fresh = false;  // lost the RSS input channel
+    EXPECT_EQ(decide(s, h), State::kMrmEmergency);
   }
 }
 
@@ -184,7 +189,7 @@ TEST(Decide, StoppedNeedsResetAndFullHealth)
   EXPECT_EQ(decide(State::kStopped, h), State::kNormal);
 
   // Each missing condition blocks the reset.
-  Health bad[7];
+  Health bad[8];
   for (Health & b : bad) {
     b = h;
   }
@@ -195,6 +200,7 @@ TEST(Decide, StoppedNeedsResetAndFullHealth)
   bad[4].internal_fault = true;
   bad[5].deadline_missed = true;
   bad[6].reject_limit_reached = true;
+  bad[7].independent_fresh = false;
   for (const Health & b : bad) {
     EXPECT_EQ(decide(State::kStopped, b), State::kStopped);
   }

@@ -31,7 +31,7 @@ void HeartbeatMonitor::update(Source src, const HeartbeatSample & s) noexcept
     return;
   }
   if (delta > limits::kMaxHeartbeatSeqJump) {
-    ++c.jumps;  // counted (FR-HB-5); still a live, advancing publisher
+    ++c.jumps;  // counted; still a live, advancing publisher
   }
   c.last_seq = s.seq;
   c.last_alive_ns = s.rx_time_ns;
