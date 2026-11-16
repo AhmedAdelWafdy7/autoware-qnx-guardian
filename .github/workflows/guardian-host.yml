@@ -43,10 +43,31 @@ jobs:
 
       - name: Coverage summary
         working-directory: guardian
-        run: gcovr --root . --filter src/ --exclude src/platform/ build/host-test
+        run: gcovr --root . --filter src/ --filter rss/src/ --exclude src/platform/ build/host-test
 
       - name: Release build (POSIX runner)
         working-directory: guardian
         run: |
           cmake --preset host-release -G Ninja
           cmake --build --preset host-release
+
+  # RSS formulas vs intel/ad-rss-lib (LGPL-2.1). ad-rss-lib is fetched and built here at a pinned
+  # version for this test only; it is never part of the Guardian or QNX build.
+  rss-oracle:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install toolchain, GoogleTest, Boost, spdlog
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends cmake g++ googletest libboost-dev libspdlog-dev
+
+      - name: Cache ad-rss-lib build
+        uses: actions/cache@v4
+        with:
+          path: guardian/build/rss-oracle/install
+          key: ad-rss-lib-${{ runner.os }}-${{ hashFiles('guardian/test/rss_oracle/run.sh') }}
+
+      - name: Oracle test
+        run: guardian/test/rss_oracle/run.sh

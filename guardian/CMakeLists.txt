@@ -10,10 +10,10 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 option(GUARDIAN_BUILD_TESTS "Build host unit tests (GoogleTest)" OFF)
 option(GUARDIAN_COVERAGE "Instrument for gcov coverage (host only)" OFF)
 
-# NFR-Q-4: -Wall -Wextra -Werror on every target we own.
+# -Wall -Wextra -Werror on every target we own.
 set(GUARDIAN_WARNINGS -Wall -Wextra -Werror -Wpedantic -Wshadow -Wconversion -Wsign-conversion)
 
-# ---- RT core: platform-independent, no exceptions / RTTI (NFR-Q-1) ----
+# ---- RT core: platform-independent, no exceptions / RTTI ----
 add_library(guardian_core STATIC
   src/guardian.cpp
   src/heartbeat_monitor.cpp
@@ -26,6 +26,20 @@ target_compile_options(guardian_core PRIVATE ${GUARDIAN_WARNINGS} -fno-exception
 if(GUARDIAN_COVERAGE)
   target_compile_options(guardian_core PRIVATE --coverage -O0)
   target_link_options(guardian_core PUBLIC --coverage)
+endif()
+
+# ---- RSS core: dependency-free, same RT rules as guardian_core ----
+add_library(guardian_rss STATIC rss/src/rss.cpp)
+target_include_directories(guardian_rss PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/rss/include)
+# Header-only use of guardian_core (limits.hpp, static_asserts); guardian_core links guardian_rss.
+target_include_directories(guardian_rss PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_compile_options(guardian_rss PRIVATE ${GUARDIAN_WARNINGS} -fno-exceptions -fno-rtti)
+
+target_link_libraries(guardian_core PUBLIC guardian_rss)
+
+if(GUARDIAN_COVERAGE)
+  target_compile_options(guardian_rss PRIVATE --coverage -O0)
+  target_link_options(guardian_rss PUBLIC --coverage)
 endif()
 
 # ---- Executable: QNX timer+pulse loop, or POSIX clock_nanosleep loop ----
@@ -60,8 +74,9 @@ if(GUARDIAN_BUILD_TESTS)
     test/test_heartbeat_monitor.cpp
     test/test_event_log.cpp
     test/test_guardian.cpp
+    test/test_rss.cpp
   )
-  target_link_libraries(guardian_tests PRIVATE guardian_core GTest::gtest_main)
+  target_link_libraries(guardian_tests PRIVATE guardian_core guardian_rss GTest::gtest_main)
   target_compile_options(guardian_tests PRIVATE -Wall -Wextra -Werror)
   gtest_discover_tests(guardian_tests)
 endif()
