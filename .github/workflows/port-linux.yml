@@ -1,0 +1,42 @@
+# Autoware safety layer port: Linux check in a ros:jazzy container.
+# Fetches the pinned upstream sources, applies port/patches and builds the four MUST packages,
+# so every patch is shown to apply to the pins and to keep the Linux build working (no PCL).
+name: port-linux
+
+# No path filters, like guardian-host: the job must report on every pull request.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: port-linux-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.os }}
+    container: ros:jazzy
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Build patched MUST packages
+        run: port/linux-build.sh "$RUNNER_TEMP/port-linux"
+
+      - name: Upload colcon logs
+        if: failure()
+        uses: actions/upload-artifact@v5
+        with:
+          name: port-linux-logs-${{ matrix.os }}
+          path: ${{ runner.temp }}/port-linux/log
+          retention-days: 7

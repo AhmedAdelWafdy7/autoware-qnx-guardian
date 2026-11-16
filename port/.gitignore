@@ -1,0 +1,8 @@
+# Upstream sources (fetched with vcs import from autoware.repos) and colcon output.
+src/
+build/
+install/
+log/
+build-host/
+qnx-native/out/
+build-linux/
